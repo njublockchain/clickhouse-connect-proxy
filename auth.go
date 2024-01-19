@@ -14,9 +14,10 @@ type AuthPlugin struct {
 	dbName      string
 	collName    string
 	apiTokenKey string
+	whitelist   []string
 }
 
-func NewAuthPlugin(mongoURI string, dbName string, collName string, apiTokenKey string) *AuthPlugin {
+func NewAuthPlugin(mongoURI, dbName, collName, apiTokenKey string, whitelist []string) *AuthPlugin {
 	client, err := mongo.Connect(context.TODO(), options.Client().ApplyURI(mongoURI))
 	if err != nil {
 		log.Fatal(err)
@@ -27,10 +28,19 @@ func NewAuthPlugin(mongoURI string, dbName string, collName string, apiTokenKey 
 		dbName:      dbName,
 		collName:    collName,
 		apiTokenKey: apiTokenKey,
+		whitelist:   whitelist,
 	}
 }
 
 func (ap *AuthPlugin) Auth(apiToken string) bool {
+	if ap.whitelist != nil {
+		for _, token := range ap.whitelist {
+			if token == apiToken {
+				return true
+			}
+		}
+	}
+
 	result := ap.mongoClient.Database(ap.dbName).Collection(ap.collName).FindOne(context.TODO(), bson.M{
 		"apiToken": apiToken,
 	})
