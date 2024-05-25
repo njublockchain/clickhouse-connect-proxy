@@ -7,6 +7,8 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+
+	"github.com/njublockchain/clickhouse-connect-proxy/auth"
 )
 
 func copyHeader(dst, src http.Header) {
@@ -21,10 +23,10 @@ func copyHeader(dst, src http.Header) {
 type ProxyMiddleware struct {
 	clickhouseURI *url.URL
 
-	authPlugin *AuthPlugin
+	authPlugin auth.AuthPlugin
 }
 
-func NewProxyMiddleware(clickhouseURI string, authPlugin *AuthPlugin) *ProxyMiddleware {
+func NewProxyMiddleware(clickhouseURI string, authPlugin auth.AuthPlugin) *ProxyMiddleware {
 	u, err := url.Parse(clickhouseURI)
 	if err != nil {
 		log.Fatal()

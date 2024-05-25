@@ -8,6 +8,7 @@ import (
 
 	"github.com/joho/godotenv"
 	proxy "github.com/njublockchain/clickhouse-connect-proxy"
+	"github.com/njublockchain/clickhouse-connect-proxy/auth"
 )
 
 func main() {
@@ -20,28 +21,31 @@ func main() {
 		log.Fatal("Missing CLICKHOUSE_URI")
 	}
 
-	enableAuth := len(os.Getenv("ENABLE_AUTH")) > 0 && os.Getenv("ENABLE_AUTH") != "false"
-	if enableAuth && os.Getenv("MONGO_URI") == "" {
-		log.Fatal("Missing MONGO_URI")
-	}
-
 	var whitelist []string
 	if os.Getenv("MONGO_WHITELIST") != "" {
 		whitelist = strings.Split(os.Getenv("MONGO_WHITELIST"), ",")
 	}
 
-	var authPlugin *proxy.AuthPlugin
-	if enableAuth {
-		authPlugin = proxy.NewAuthPlugin(
+	var authPlugin auth.AuthPlugin
+
+	switch os.Getenv("ENABLE_AUTH") {
+	case "mongo":
+		authPlugin = auth.NewMongoAuthPlugin(
 			os.Getenv("MONGO_URI"),
 			os.Getenv("MONGO_DB"),
 			os.Getenv("MONGO_COLL"),
 			os.Getenv("MONGO_APITOKEN_KEY"),
 			whitelist,
 		)
-		log.Printf("Auth enabled")
+		log.Printf("Mongo Auth enabled")
+	case "pg":
+		authPlugin = auth.NewPGAuthPlugin(
+			os.Getenv("PG_URI"),
+			os.Getenv("PG_QUERY"),
+			whitelist,
+		)
+		log.Printf("Postgres Auth enabled")
 	}
-
 	middleware := proxy.NewProxyMiddleware(os.Getenv("CLICKHOUSE_URI"), authPlugin)
 
 	// create a http/https server to proxy the request

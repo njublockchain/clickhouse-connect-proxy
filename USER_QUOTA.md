@@ -4,7 +4,7 @@ Please remember to replace `[xxx]` to yours
 
 ```sql
 CREATE USER IF NOT EXISTS
-    [USERNAME]
+    proxy
 IDENTIFIED BY [PASSWORD]
 DEFAULT DATABASE NONE;
 

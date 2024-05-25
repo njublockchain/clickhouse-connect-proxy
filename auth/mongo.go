@@ -1,4 +1,4 @@
-package proxy
+package auth
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-type AuthPlugin struct {
+type MongoAuthPlugin struct {
 	mongoClient *mongo.Client
 	dbName      string
 	collName    string
@@ -17,13 +17,13 @@ type AuthPlugin struct {
 	whitelist   []string
 }
 
-func NewAuthPlugin(mongoURI, dbName, collName, apiTokenKey string, whitelist []string) *AuthPlugin {
+func NewMongoAuthPlugin(mongoURI, dbName, collName, apiTokenKey string, whitelist []string) *MongoAuthPlugin {
 	client, err := mongo.Connect(context.TODO(), options.Client().ApplyURI(mongoURI))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	return &AuthPlugin{
+	return &MongoAuthPlugin{
 		mongoClient: client,
 		dbName:      dbName,
 		collName:    collName,
@@ -32,7 +32,7 @@ func NewAuthPlugin(mongoURI, dbName, collName, apiTokenKey string, whitelist []s
 	}
 }
 
-func (ap *AuthPlugin) Auth(apiToken string) bool {
+func (ap *MongoAuthPlugin) Auth(apiToken string) bool {
 	if ap.whitelist != nil {
 		for _, token := range ap.whitelist {
 			if token == apiToken {
@@ -42,7 +42,7 @@ func (ap *AuthPlugin) Auth(apiToken string) bool {
 	}
 
 	result := ap.mongoClient.Database(ap.dbName).Collection(ap.collName).FindOne(context.TODO(), bson.M{
-		"apiToken": apiToken,
+		ap.apiTokenKey: apiToken,
 	})
 	result.Decode(&struct{}{}) // ignore the result
 	if result.Err() != nil {
