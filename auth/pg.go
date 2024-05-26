@@ -2,7 +2,6 @@ package auth
 
 import (
 	"database/sql"
-	"log"
 
 	_ "github.com/lib/pq"
 )
@@ -36,7 +35,6 @@ func (ap *PGAuthPlugin) Auth(apiToken string) bool {
 		}
 	}
 
-	log.Println(ap.query)
 	rows, err := ap.db.Query(ap.query, apiToken)
 	if err != nil {
 		panic(err)
