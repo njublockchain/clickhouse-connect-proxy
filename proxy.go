@@ -42,8 +42,24 @@ func NewProxyMiddleware(clickhouseURI string, authPlugin auth.AuthPlugin) *Proxy
 
 // proxy the http request to the real host
 func (pm *ProxyMiddleware) ProxyRequest(w http.ResponseWriter, r *http.Request) {
+	err := r.ParseForm()
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	log.Println(r.Header)
+
 	// get the api token from basic auth
-	apiToken, _, _ := r.BasicAuth()
+	user, pass, ok := r.BasicAuth()
+	var apiToken string
+	if !ok {
+		log.Printf("failed to get user & pass")
+		apiToken = r.Header.Get("X-Clickhouse-User")		
+	} else {
+		log.Printf("%s: %s", user, pass)
+		apiToken = user
+	}
 
 	// check auth
 	if pm.authPlugin != nil {
@@ -66,6 +82,8 @@ func (pm *ProxyMiddleware) ProxyRequest(w http.ResponseWriter, r *http.Request) 
 
 	// clear basic auth
 	r.Header.Del("Authorization")
+	r.Header.Del("X-Clickhouse-User")
+	r.Header.Del("X-Clickhouse-Key")
 
 	// connect to the remote server
 	remote, err := net.Dial("tcp", pm.clickhouseURI.Host)
