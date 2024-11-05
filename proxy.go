@@ -23,10 +23,11 @@ func copyHeader(dst, src http.Header) {
 type ProxyMiddleware struct {
 	clickhouseURI *url.URL
 
+	adminKey   string
 	authPlugin auth.AuthPlugin
 }
 
-func NewProxyMiddleware(clickhouseURI string, authPlugin auth.AuthPlugin) *ProxyMiddleware {
+func NewProxyMiddleware(clickhouseURI, adminKey string, authPlugin auth.AuthPlugin) *ProxyMiddleware {
 	u, err := url.Parse(clickhouseURI)
 	if err != nil {
 		log.Fatal()
@@ -34,8 +35,13 @@ func NewProxyMiddleware(clickhouseURI string, authPlugin auth.AuthPlugin) *Proxy
 
 	log.Printf("Proxying to %s", u.Host)
 
+	if len(adminKey) < 8 {
+		log.Fatalf("Admin key is too short")
+	}
+
 	return &ProxyMiddleware{
 		clickhouseURI: u,
+		adminKey:      adminKey,
 		authPlugin:    authPlugin,
 	}
 }
@@ -55,18 +61,21 @@ func (pm *ProxyMiddleware) ProxyRequest(w http.ResponseWriter, r *http.Request) 
 	var apiToken string
 	if !ok {
 		log.Printf("failed to get user & pass")
-		apiToken = r.Header.Get("X-Clickhouse-User")		
+		apiToken = r.Header.Get("X-Clickhouse-User")
 	} else {
 		log.Printf("%s: %s", user, pass)
 		apiToken = user
 	}
 
-	// check auth
-	if pm.authPlugin != nil {
-		if !pm.authPlugin.Auth(apiToken) {
-			log.Printf("Unauthorized apiToken: %s", apiToken)
-			http.Error(w, "Unauthorized.", http.StatusUnauthorized)
-			return
+	// check admin key
+	if apiToken != pm.adminKey {
+		// check auth
+		if pm.authPlugin != nil {
+			if !pm.authPlugin.Auth(apiToken) {
+				log.Printf("Unauthorized apiToken: %s", apiToken)
+				http.Error(w, "Unauthorized.", http.StatusUnauthorized)
+				return
+			}
 		}
 	}
 

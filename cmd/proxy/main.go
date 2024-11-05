@@ -46,7 +46,9 @@ func main() {
 		)
 		log.Printf("Postgres Auth enabled")
 	}
-	middleware := proxy.NewProxyMiddleware(os.Getenv("CLICKHOUSE_URI"), authPlugin)
+	adminKey := os.Getenv("ADMIN_KEY")
+	chURI := os.Getenv("CLICKHOUSE_URI")
+	middleware := proxy.NewProxyMiddleware(chURI, adminKey, authPlugin)
 
 	// create a http/https server to proxy the request
 	http.HandleFunc("/", middleware.ProxyRequest)
