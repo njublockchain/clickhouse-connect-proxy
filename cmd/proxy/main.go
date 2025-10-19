@@ -22,9 +22,10 @@ func main() {
 	}
 
 	var whitelist []string
-	if os.Getenv("MONGO_WHITELIST") != "" {
-		whitelist = strings.Split(os.Getenv("MONGO_WHITELIST"), ",")
+	if os.Getenv("WHITELIST") != "" {
+		whitelist = strings.Split(os.Getenv("WHITELIST"), ",")
 	}
+	log.Printf("Whitelist: %v", whitelist)
 
 	var authPlugin auth.AuthPlugin
 
@@ -46,7 +47,11 @@ func main() {
 		)
 		log.Printf("Postgres Auth enabled")
 	}
+	
 	adminKey := os.Getenv("ADMIN_KEY")
+	log.Println("Admin Key:", adminKey)
+
+	// create the proxy middleware
 	chURI := os.Getenv("CLICKHOUSE_URI")
 	middleware := proxy.NewProxyMiddleware(chURI, adminKey, authPlugin)
 

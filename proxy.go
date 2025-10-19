@@ -62,8 +62,13 @@ func (pm *ProxyMiddleware) ProxyRequest(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		log.Printf("failed to get user & pass")
 		apiToken = r.Header.Get("X-Clickhouse-User")
+		log.Printf("X-Clickhouse-User: %s", apiToken)
+		if apiToken == "" {
+			http.Error(w, "Unauthorized.", http.StatusUnauthorized)
+			return
+		}
 	} else {
-		log.Printf("%s: %s", user, pass)
+		log.Printf("BasicAuth %s: %s", user, pass)
 		apiToken = user
 	}
 
@@ -91,6 +96,7 @@ func (pm *ProxyMiddleware) ProxyRequest(w http.ResponseWriter, r *http.Request) 
 
 	// clear basic auth
 	r.Header.Del("Authorization")
+	// clear clickhouse user/key header
 	r.Header.Del("X-Clickhouse-User")
 	r.Header.Del("X-Clickhouse-Key")
 
