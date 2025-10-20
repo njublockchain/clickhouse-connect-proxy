@@ -2,11 +2,13 @@ package proxy
 
 import (
 	"bufio"
+	"bytes"
 	"io"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/njublockchain/clickhouse-connect-proxy/auth"
 )
@@ -48,27 +50,59 @@ func NewProxyMiddleware(clickhouseURI, adminKey string, authPlugin auth.AuthPlug
 
 // proxy the http request to the real host
 func (pm *ProxyMiddleware) ProxyRequest(w http.ResponseWriter, r *http.Request) {
-	err := r.ParseForm()
-	if err != nil {
-		log.Println(err)
-		return
+	// Try to parse POST form values (when applicable) without consuming the body we need to forward.
+	var bodyBackup []byte
+	parsedForm := false
+	if r.Method == http.MethodPost {
+		ct := r.Header.Get("Content-Type")
+		if strings.HasPrefix(ct, "application/x-www-form-urlencoded") || strings.HasPrefix(ct, "multipart/form-data") {
+			var err error
+			bodyBackup, err = io.ReadAll(r.Body)
+			if err != nil {
+				log.Printf("Error reading request body: %v", err)
+				http.Error(w, "Bad request.", http.StatusBadRequest)
+				return
+			}
+			// restore body for parsing
+			r.Body = io.NopCloser(bytes.NewBuffer(bodyBackup))
+			if strings.HasPrefix(ct, "multipart/form-data") {
+				if err := r.ParseMultipartForm(32 << 20); err != nil { // 32MB max memory
+					log.Printf("Error parsing multipart form: %v", err)
+				} else {
+					parsedForm = true
+				}
+			} else {
+				if err := r.ParseForm(); err != nil {
+					log.Printf("Error parsing form: %v", err)
+				} else {
+					parsedForm = true
+				}
+			}
+			// restore body again for forwarding later
+			r.Body = io.NopCloser(bytes.NewBuffer(bodyBackup))
+		}
 	}
 
-	log.Println(r.Header)
-
 	// get the api token from basic auth
-	user, pass, ok := r.BasicAuth()
+	user, _, ok := r.BasicAuth()
 	var apiToken string
 	if !ok {
-		log.Printf("failed to get user & pass")
+		// Try header first
 		apiToken = r.Header.Get("X-Clickhouse-User")
-		log.Printf("X-Clickhouse-User: %s", apiToken)
+		// Fallback to POST form body fields when present
+		if apiToken == "" && parsedForm {
+			// Standard ClickHouse field name
+			apiToken = r.PostFormValue("user")
+			if apiToken == "" {
+				// Non-standard but sometimes used
+				apiToken = r.PostFormValue("X-Clickhouse-User")
+			}
+		}
 		if apiToken == "" {
 			http.Error(w, "Unauthorized.", http.StatusUnauthorized)
 			return
 		}
 	} else {
-		log.Printf("BasicAuth %s: %s", user, pass)
 		apiToken = user
 	}
 
@@ -84,12 +118,26 @@ func (pm *ProxyMiddleware) ProxyRequest(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	// override the url query
+	// override the url query: set ClickHouse auth using backend defaults, but allow API token as quota key
 	urlQuery := r.URL.Query()
-	urlQuery.Set("user", pm.clickhouseURI.User.Username())
-	password, isSet := pm.clickhouseURI.User.Password()
-	if isSet {
-		urlQuery.Set("password", password)
+	// Default user/password from backend DSN
+	userFromDSN := pm.clickhouseURI.User.Username()
+	passFromDSN, hasPass := pm.clickhouseURI.User.Password()
+
+	// Allow user/password coming from POST form body to be used instead of DSN if provided
+	if parsedForm {
+		if v := r.PostFormValue("user"); v != "" {
+			userFromDSN = v
+		}
+		if v := r.PostFormValue("password"); v != "" {
+			passFromDSN = v
+			hasPass = true
+		}
+	}
+
+	urlQuery.Set("user", userFromDSN)
+	if hasPass {
+		urlQuery.Set("password", passFromDSN)
 	}
 	urlQuery.Set("quota_key", apiToken)
 	r.URL.RawQuery = urlQuery.Encode()
